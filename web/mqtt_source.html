@@ -1,0 +1,71 @@
+<html>
+  <body>
+    mqtt source
+  </body>
+</html>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+<script>
+    // 将在全局初始化一个 mqtt 变量
+    console.log(mqtt)
+    const clientId = 'source' + Math.random().toString(16).substr(2, 8)
+
+const host = 'wss://www.bxzryd.cn:8084/mqtt'
+const topic_source_reg="source/reg"
+const topic_source_pre="source/"
+
+const options = {
+  keepalive: 60,
+  clientId: clientId,
+  protocolId: 'MQTT',
+  protocolVersion: 4,
+  clean: true,
+  reconnectPeriod: 3000,
+  connectTimeout: 30 * 1000,
+  username:"wuyaxiong",
+  password:"wuyaxiong1982",
+  will: {
+    topic: 'WillMsg',
+    payload: 'Connection Closed abnormally..!',
+    qos: 0,
+    retain: false
+  },
+}
+
+let sourceInfo={
+  id:clientId,
+  localtion:"广东省兴宁市",
+  categorize:"car",
+  username:options.username
+}
+console.log('Connecting mqtt client')
+const client = mqtt.connect(host, options)
+
+client.on('error', (err) => {
+  console.log('Connection error: ', err)
+  client.end()
+})
+
+client.on('reconnect', () => {
+  console.log('Reconnecting...')
+})
+
+client.on('connect', () => {
+  console.log('Client connected:' + clientId)
+  // Subscribe
+  client.subscribe(topic_source_pre+clientId, { qos: 2 })
+  client.publish(topic_source_reg, JSON.stringify( sourceInfo))
+})
+
+// Unsubscribe
+// client.unubscribe('testtopic', () => {
+//   console.log('Unsubscribed')
+// })
+
+// Received
+client.on('message', (topic, message, packet) => {
+  console.log('Received Message: ' + message.toString() + '\nOn topic: ' + topic)
+})
+
+
+</script>

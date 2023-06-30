@@ -3,6 +3,7 @@ package mqtt_client
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,18 +11,23 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/yaxiongwu/webrtc-mqtt-server/pkg/clients"
 )
 
-//const protocol = "ssl"
-const protocol = "tcp"
+const protocol = "ssl"
+
+//const protocol = "tcp"
 
 //const broker = "k101ceee.ala.cn-hangzhou.emqxsl.cn"
-const broker = "127.0.0.1"
+//const broker = "127.0.0.1"
+const broker = "www.bxzryd.cn"
 
 //const broker = "broker.emqx.io"
-const port = 1883
+const port = 8883
 const topic_connected = "$SYS/brokers/emqx@127.0.0.1/clients/+/connected"
 const topic_disconnected = "$SYS/brokers/emqx@127.0.0.1/clients/+/disconnected"
+const topic_source_reg = "source/reg"
+const topic_source_query = "source/query"
 const topic_sys = "$SYS/brokers/#"
 const username = "wuyaxiong"
 const password = "wuyaxiong1982"
@@ -33,6 +39,7 @@ type MqttClient struct {
 	OnSubscribeDisconnected func([]byte)
 	Topic                   string
 	Qos                     int8
+	SourceList              clients.SourceList
 }
 
 func MqttClientInit() *MqttClient {
@@ -61,8 +68,10 @@ func MqttClientInit() *MqttClient {
 	// time.Sleep(time.Second * 1) // 暂停一秒等待 subscribe 完成
 	// publish(client)
 	log.Println("MqttClientInit ok")
+
 	return &MqttClient{
-		client: client,
+		client:     client,
+		SourceList: clients.SourceList{},
 	}
 }
 
@@ -159,6 +168,38 @@ func (m *MqttClient) Subscribe() {
 		//fmt.Printf("Received `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
 		m.OnSubscribeDisconnected(msg.Payload())
 	})
+	m.client.Subscribe(topic_source_reg, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
+		fmt.Printf("topic_source_reg `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
+		sourceInfo := clients.Source{}
+		//logger.Printf("Disconnect payload `%s`\n", payload)
+
+		err := json.Unmarshal(msg.Payload(), &sourceInfo)
+		//解析失败会报错，如json字符串格式不对，缺"号，缺}等。
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Printf("source info:%v\n", sourceInfo)
+		m.SourceList.SList.PushBack(sourceInfo)
+		//m.OnSubscribeDisconnected(msg.Payload())
+	})
+
+	m.client.Subscribe(topic_source_query, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
+		fmt.Printf("topic_source_query `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
+		// sourceInfo := clients.Source{}
+		// //logger.Printf("Disconnect payload `%s`\n", payload)
+
+		// err := json.Unmarshal(msg.Payload(), &sourceInfo)
+		// //解析失败会报错，如json字符串格式不对，缺"号，缺}等。
+		// if err != nil {
+		// 	fmt.Println(err)
+		// }
+		// fmt.Printf("source info:%v\n", sourceInfo)
+		for e := m.SourceList.SList.Front(); e != nil; e = e.Next() {
+			fmt.Print(e.Value)
+		}
+
+	})
+
 	// client.Subscribe(topic, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
 	// 	fmt.Printf("Received2 `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
 	// })

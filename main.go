@@ -98,12 +98,22 @@ func ginRun() {
 	})
 
 	r.LoadHTMLGlob("web/*")
+
 	r.GET("/vedio", func(c *gin.Context) {
 		logger.Printf("c.Query(id):%v", c.Query("id"))
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"id": c.Query("id"),
 		})
 	})
+
+	r.GET("/mqtt_source", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "mqtt_source.html", gin.H{})
+	})
+
+	r.GET("/mqtt_client", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "mqtt_client.html", gin.H{})
+	})
+
 	r.GET("/index/:destination", func(context *gin.Context) {
 		context.HTML(http.StatusOK, "index_phone.html", gin.H{
 			"destination": context.Param("destination"),
@@ -115,7 +125,7 @@ func ginRun() {
 		})
 	})
 	r.Use(LoadTls())
-	r.RunTLS(":8080", "ssl/bxzryd.pem", "ssl/bxzryd.key")
+	r.RunTLS(":8080", "certs/bxzryd.pem", "certs/bxzryd.key")
 	//r.Run(":8080")
 }
 
