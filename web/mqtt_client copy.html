@@ -1,0 +1,253 @@
+<html>
+
+<body>
+  <div>
+    <video width="320" height="240" controls="controls" id="localVideo"></video>
+    <video width="320" height="240" controls="controls" id="remoteVideo"></video>
+
+  </div>
+  <div>
+    <ul id="list">
+    </ul>
+  </div>
+  mqtt client
+</body>
+
+</html>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+<script>
+  // 将在全局初始化一个 mqtt 变量
+  console.log(mqtt)
+  const clientId = 'client' + Math.random().toString(16).substr(2, 8)
+
+  const host = 'wss://www.bxzryd.cn:8084/mqtt'
+  const topic_source_reg = "source/reg"
+  const topic_source_pre = "source/"
+  const topic_source_query = "source/query"
+  const options = {
+    keepalive: 60,
+    clientId: clientId,
+    protocolId: 'MQTT',
+    protocolVersion: 4,
+    clean: true,
+    reconnectPeriod: 3000,
+    connectTimeout: 30 * 1000,
+    username: "wuyaxiong",
+    password: "wuyaxiong1982",
+    will: {
+      topic: 'WillMsg',
+      payload: 'Connection Closed abnormally..!',
+      qos: 0,
+      retain: false
+    },
+  }
+
+  console.log('Connecting mqtt client')
+  const client = mqtt.connect(host, options)
+
+  client.on('error', (err) => {
+    console.log('Connection error: ', err)
+    client.end()
+  })
+
+  client.on('reconnect', () => {
+    console.log('Reconnecting...')
+  })
+
+  client.on('connect', () => {
+    console.log('Client connected:' + clientId)
+    // Subscribe
+    client.subscribe(topic_source_pre + clientId, { qos: 2 })
+    client.publish(topic_source_query, "car")
+  })
+
+  // Unsubscribe
+  // client.unubscribe('testtopic', () => {
+  //   console.log('Unsubscribed')
+  // })
+
+  // Received
+  client.on('message', (topic, message, packet) => {
+    console.log('Received Message: ' + message.toString() + '\nOn topic: ' + topic)
+  })
+
+  // navigator.mediaDevices.getUserMedia({ audio: true, video: true }) 
+  //     // 参数表示需要同时获取到音频和视频
+  //         .then(stream => {
+  //           // 获取到优化后的媒体流
+  //           let video = document.querySelector('#rtc');
+  //           video.srcObject = stream;
+  //         })
+  //         .catch(err => {
+  //           // 捕获错误
+  //         });
+
+
+  const localVideo = document.querySelector('#localVideo');
+  const remoteVideo = document.querySelector('#remoteVideo');
+
+  //开启音视频源
+  async function start() {
+    console.log('Requesting local stream');
+
+    try {
+      //捕获摄像头和麦克风的流，放到localVideo中
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      console.log('Received local stream');
+      localVideo.srcObject = stream;
+      localStream = stream;
+      callButton.disabled = false;
+    } catch (e) {
+      alert(`getUserMedia() error: ${e.name}`);
+    }
+  }
+
+  //拨打，建立连接
+  async function call() {
+    callButton.disabled = true;
+    console.log('Starting call');
+    startTime = window.performance.now();
+
+    const configuration = {
+      iceServers: [
+        {
+          urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
+        }],
+    };
+    console.log('RTCPeerConnection configuration:', configuration);
+
+    //源连接，
+    pc1 = new RTCPeerConnection(configuration);
+    //当ice准备好后，加到目标源中
+    pc1.addEventListener('icecandidate', e => onIceCandidate(pc2, e));
+    //把localStream的音视频，放到源中
+    localStream.getTracks().forEach(track => pc1.addTrack(track, localStream));
+
+    //目标
+    pc2 = new RTCPeerConnection(configuration);
+    //等待源发来的流
+    pc2.addEventListener('track', gotRemoteStream);
+
+
+    try {
+      console.log('pc1 createOffer start');
+      const offerOptions = {
+        offerToReceiveAudio: 1,
+        offerToReceiveVideo: 1
+      };
+
+      //创建和设置连接描述
+      const desc_pc1 = await pc1.createOffer(offerOptions);
+      console.log("desc_pc1:");
+      console.log(desc_pc1);
+      await pc1.setLocalDescription(desc_pc1);
+
+      //目标 拿到源的连接描述后，给自己，并生成自己的连接描述
+      await pc2.setRemoteDescription(desc_pc1);
+      const desc_pc2 = await pc2.createAnswer();
+      console.log("answer desc_pc2 :");
+      console.log(desc_pc2);
+      await pc2.setLocalDescription(desc_pc2);
+
+      //源拿到目标的连接描述后，知道有人要来连接，开启 通道
+      await pc1.setRemoteDescription(desc_pc2);
+
+    } catch (e) {
+      onCreateSessionDescriptionError(e);
+    }
+  }
+
+  async function onIceCandidate(pc, event) {
+
+    try {
+      console.log(event.candidate.address);
+
+      //源发来的ice，加入到目标中
+      console.log(event.candidate);
+      pc.addIceCandidate(event.candidate);
+      onAddIceCandidateSuccess(pc);
+
+    } catch (e) {
+      onAddIceCandidateError(pc, e);
+    }
+    //console.log(`${getName(pc)} ICE candidate:\n${event.candidate ? event.candidate.candidate : '(null)'}`);
+  }
+
+
+  let PeerConnection = window.RTCPeerConnection ||
+    window.mozRTCPeerConnection ||
+    window.webkitRTCPeerConnection;
+  let peer = new PeerConnection(iceServers);
+
+  function initPeer() {
+    this.peerA.addStream(this.localstream); // 添加本地流
+    this.peerA.onicecandidate = (event) => {
+      // 监听 A 的ICE候选信息 如果收集到，就添加给 B 连接状态
+      if (event.candidate) {
+        this.peerB.addIceCandidate(event.candidate);
+      }
+    };
+    // 监听是否有媒体流接入，如果有就赋值给 rtcB 的 src
+    this.peerB.onaddstream = (event) => {
+      let video = document.querySelector('#rtcB');
+      video.srcObject = event.stream;
+    };
+    this.peerB.onicecandidate = (event) => {
+      //连接状态
+      // 监听 B 的ICE候选信息 如果收集到，就添加给 A
+      if (event.candidate) {
+        this.peerA.addIceCandidate(event.candidate);
+      }
+    };
+  }
+
+  peer.oniceconnectionstatechange = (evt) => {
+    console.log('ICE connection state change: ' + evt.target.iceConnectionState);
+  };
+
+
+  async function call() {
+    if (!this.peerA || !this.peerB) { // 判断是否有对应实例，没有就重新创建
+      this.initPeer();
+    }
+    try {
+      let offer = await this.peerA.createOffer(this.offerOption); // 创建 offer
+      await this.onCreateOffer(offer);
+    } catch (e) {
+      console.log('createOffer: ', e);
+    }
+  }
+
+  async function onCreateOffer(desc) {
+    try {
+      await this.peerB.setLocalDescription(desc); // 呼叫端设置本地 offer 描述
+    } catch (e) {
+      console.log('Offer-setLocalDescription: ', e);
+    }
+    try {
+      await this.peerA.setRemoteDescription(desc); // 接收端设置远程 offer 描述
+    } catch (e) {
+      console.log('Offer-setRemoteDescription: ', e);
+    }
+    try {
+      let answer = await this.peerA.createAnswer(); // 接收端创建 answer
+      await this.onCreateAnswer(answer);
+    } catch (e) {
+      console.log('createAnswer: ', e);
+    }
+  }
+
+  async function onCreateAnswer(desc) {
+    try {
+      await this.peerA.setLocalDescription(desc); // 接收端设置本地 answer 描述
+    } catch (e) {
+      console.log('answer-setLocalDescription: ', e);
+    }
+    try {
+      await this.peerB.setRemoteDescription(desc); // 呼叫端端设置远程 answer 描述
+    } catch (e) {
+      console.log('answer-setRemoteDescription: ', e);
+    }
+  }
+</script>

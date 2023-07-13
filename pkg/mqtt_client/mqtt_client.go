@@ -26,8 +26,8 @@ const broker = "www.bxzryd.cn"
 const port = 8883
 const topic_connected = "$SYS/brokers/emqx@127.0.0.1/clients/+/connected"
 const topic_disconnected = "$SYS/brokers/emqx@127.0.0.1/clients/+/disconnected"
-const topic_source_reg = "source/reg"
-const topic_source_query = "source/query"
+const topic_source_reg = "server/reg"
+const topic_source_query = "server/query"
 const topic_sys = "$SYS/brokers/#"
 const username = "wuyaxiong"
 const password = "wuyaxiong1982"
@@ -172,30 +172,38 @@ func (m *MqttClient) Subscribe() {
 		fmt.Printf("topic_source_reg `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
 		sourceInfo := clients.Source{}
 		//logger.Printf("Disconnect payload `%s`\n", payload)
-
 		err := json.Unmarshal(msg.Payload(), &sourceInfo)
 		//解析失败会报错，如json字符串格式不对，缺"号，缺}等。
 		if err != nil {
 			fmt.Println(err)
 		}
 		fmt.Printf("source info:%v\n", sourceInfo)
-		m.SourceList.SList.PushBack(sourceInfo)
+		m.SourceList.SList = append(m.SourceList.SList, sourceInfo)
 		//m.OnSubscribeDisconnected(msg.Payload())
 	})
 
 	m.client.Subscribe(topic_source_query, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
 		fmt.Printf("topic_source_query `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
-		// sourceInfo := clients.Source{}
-		// //logger.Printf("Disconnect payload `%s`\n", payload)
+		clientQuery := clients.ClientQuerySource{}
 
-		// err := json.Unmarshal(msg.Payload(), &sourceInfo)
-		// //解析失败会报错，如json字符串格式不对，缺"号，缺}等。
-		// if err != nil {
-		// 	fmt.Println(err)
+		err := json.Unmarshal(msg.Payload(), &clientQuery)
+		//解析失败会报错，如json字符串格式不对，缺"号，缺}等。
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Printf("clientQuery%v\n", clientQuery)
+
+		//把list的sourceId放到一个列表中
+		// len :=len( m.SourceList.SList)
+		// clientsIdSlice := make([]string, len)
+		// for e := m.SourceList.SList.Front(); e != nil; e = e.Next() {
+		// 	fmt.Print(e.Value)
+		// 	clientsIdSlice = append(clientsIdSlice, e.Value.Id)
 		// }
-		// fmt.Printf("source info:%v\n", sourceInfo)
-		for e := m.SourceList.SList.Front(); e != nil; e = e.Next() {
-			fmt.Print(e.Value)
+		//bytes, _ := json.Marshal(m.SourceList.SList.Front().Value)
+		bytes, _ := json.Marshal(m.SourceList.SList)
+		if token := m.client.Publish("sourceList/"+clientQuery.Id, byte(qos), false, bytes); token.Wait() && token.Error() != nil {
+			fmt.Printf("publish failed, topic: %s, payload: %s\n", "sourceList/"+clientQuery.Id, bytes)
 		}
 
 	})
