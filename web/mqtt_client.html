@@ -2,27 +2,31 @@
 
 <body>
   <div>
-    <video width="320" height="240" controls="controls" autoplay="autoplay" id="localVideo" style="display:none;" ></video>
-    <video width="800" height="600" controls="controls" autoplay="autoplay" id="remoteVideo"></video>
+    <video width="320" height="240" controls="controls" autoplay="autoplay" id="localVideo"
+      style="display:none;"></video>
+    <video width="800" height="600" controls="controls" autoplay="autoplay" id="remoteVideo"
+      style="display:none;"></video>
 
   </div>
-  <div>
+  <div style="font-size:large;">
+    <h1>请点击下列视频源列表</h1>
+  </div>
+  <div style="font-size:large;">
     <ul id="sourceList">
     </ul>
   </div>
-  mqtt client
+
 </body>
 
 </html>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
 <script>
   const localVideo = document.querySelector('#localVideo');
   const remoteVideo = document.querySelector('#remoteVideo');
   // 将在全局初始化一个 mqtt 变量
   console.log(mqtt)
-  const clientId = 'client1';// + Math.random().toString(16).substr(2, 8)
+  const clientId = 'c' + Math.random().toString(16).substr(2, 8)
 
   const host = 'wss://www.bxzryd.cn:8084/mqtt'
   //const topic_source_reg = "source/reg"
@@ -34,11 +38,12 @@
   //const topic_source_query = "source/query"
   const topic_client_reply = "sourceList/" + clientId;
   const topic_source_list_reply = "sourceList/" + clientId;
-  const topic_client_id = "client/" + clientId;
-
-
+  const topic_to_client_id = "toClient/" + clientId;
+  const topic_from_client_id = "fromClient/" + clientId;
 
   //const topic_sub_client_id = "source/" + clientId
+  const topic_sub_source_all = "source/#"
+  const topic_sub_client_all = "client/" + clientId + "/#"
 
   const topic_pub_source_query = "server/query"
   const topic_sub_source_query = "sourceList/" + clientId
@@ -52,10 +57,27 @@
   const topic_sub_answer = "answer/" + clientId
   const topic_pub_answer_pre = "answer/"
 
+  const topic_pub_will = "will/" + clientId
+
   const topic_pub_want_connect_request_pre = "wantConnectRequest/"
   const topic_sub_want_connect_reply = "wantConnectReply/" + clientId
   let sourceId = ""
   let localStream
+
+
+  var httpRequest = new XMLHttpRequest();//第一步：建立所需的对象
+  httpRequest.open('GET', 'https://www.bxzryd.cn:8080/sourcesList', true);//第二步：打开连接  将请求参数写在url中  ps:"http://localhost:8080/rest/xxx"
+  httpRequest.send();//第三步：发送请求  将请求参数写在URL中
+  /**
+   * 获取数据后的处理程序
+   */
+  httpRequest.onreadystatechange = function () {
+    if (httpRequest.readyState == 4 && httpRequest.status == 200) {
+      var json = httpRequest.responseText;//获取到json字符串，还需解析
+      console.log("get :" + json);
+      listSources(json);
+    }
+  };
 
   const configuration = {
     iceServers: [
@@ -63,66 +85,36 @@
         urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
       }],
   };
+
+
   console.log('RTCPeerConnection configuration:', configuration);
 
   //源连接，
   peerConnect = new RTCPeerConnection(configuration);
 
-  const options = {
-    keepalive: 60,
-    clientId: clientId,
-    protocolId: 'MQTT',
-    protocolVersion: 4,
-    clean: true,
-    reconnectPeriod: 3000,
-    connectTimeout: 30 * 1000,
-    username: "wuyaxiong",
-    password: "wuyaxiong1982",
-    will: {
-      topic: 'WillMsg',
-      payload: 'Connection Closed abnormally..!',
-      qos: 0,
-      retain: false
-    },
-  }
-  const queryData = {
-    categorize: "car",
-    id: clientId,
-  }
+
+  // const queryData = {
+  //   categorize: "car",
+  //   id: clientId,
+  // }
   console.log('Connecting mqtt client')
-  const client = mqtt.connect(host, options)
 
-  client.on('error', (err) => {
-    console.log('Connection error: ', err)
-    client.end()
-  })
+  //var mqttClient=    new mqtt.MqttClient(null,options);
 
-  client.on('reconnect', () => {
-    console.log('Reconnecting...')
-  })
-
-  client.on('connect', () => {
-    console.log('Client connected:' + clientId)
-    // Subscribe  
-
-    client.subscribe(topic_sub_source_query, { qos: 2 })
-    client.subscribe(topic_sub_candidate, { qos: 2 })
-    client.subscribe(topic_sub_offer, { qos: 2 })
-
-    client.publish(topic_pub_source_query, JSON.stringify(queryData))
-  })
+  //mqttClient = mqtt.connect(host, options)
 
   // Unsubscribe
-  // client.unubscribe('testtopic', () => {
+  // mqttClient.unubscribe('testtopic', () => {
   //   console.log('Unsubscribed')
   // })
   function listSources(message) {
     let result = JSON.parse(message)
     let list = "";
+    result = JSON.parse(result.list)
     console.log(result)
     if (result != null) {
       result.forEach(element => {
-        list += "<li id='" + element.id + "''>" + element.label + "</li>";
+        list += "<li id='" + element.id + "''><h2>" + element.label + "</h2></li>";
       });
       $('#sourceList').append(list)
       $('li').click(function () {
@@ -137,66 +129,6 @@
     }
   }
 
-  // Received
-  client.on('message', async (topic, message, packet) => {
-    console.log('Received Message: ' + message.toString() + '\nOn topic: ' + topic)
-    switch (topic) {
-      case topic_sub_source_query:
-        listSources(message)
-        break;
-      case topic_sub_candidate:
-        // dealClientIdTopicMessage(message);
-        let candidata = JSON.parse(message)
-        if (candidata) {
-          this.peerConnect.addIceCandidate(candidata);
-        }
-        console.log("topic_sub_candidate," + candidata)
-        break;
-      case topic_sub_offer:
-        let offer = JSON.parse(message)
-        console.log("topic_sub_offer," + offer)
-        if (offer) {
-          try {
-            await this.peerConnect.setRemoteDescription(offer);
-          } catch (e) {
-            console.log('Offer-setRemoteDescription: ', e);
-          }
-          try {
-            let answer = await this.peerConnect.createAnswer(); // 接收端创建 answer
-            await this.peerConnect.setLocalDescription(answer);
-            client.publish(topic_pub_answer_pre + sourceId, JSON.stringify(answer))
-          } catch (e) {
-            console.log('createAnswer: ', e);
-          }
-        }
-        //dealClientIdTopicMessage(message);
-        break;
-      default:
-        break;
-    }
-
-  })
-
-  peerConnect.onicecandidate = (event) => {
-    //连接状态
-    // 监听 B 的ICE候选信息 如果收集到，就添加给 A
-    if (event.candidate) {
-      // this.peerA.addIceCandidate(event.candidate);
-      // console.log("line 125,get event.candidate:")
-      console.log(event.candidate)
-      // let candidata = {
-      //   cmd: "cand",
-      //   data: event.candidate
-      // }
-      client.publish(topic_pub_candidate_pre + sourceId, JSON.stringify(event.candidate), { qos: 2, retain: false }, function (error) {
-        if (error) {
-          console.log(error)
-        } else {
-          console.log('event.candidate Published')
-        }
-      })
-    }
-  };
 
   peerConnect.oniceconnectionstatechange = (evt) => {
     console.log('ICE connection state change: ' + evt.target.iceConnectionState);
@@ -219,28 +151,137 @@
   //           // 捕获错误
   //         });
 
+  const options = {
+    keepalive: 60,
+    clientId: clientId,
+    protocolId: 'MQTT',
+    protocolVersion: 4,
+    clean: true,
+    reconnectPeriod: 3000,
+    connectTimeout: 30 * 1000,
+    username: "wuyaxiong",
+    password: "wuyaxiong1982",
+    will: {
+      topic: 'fromClient/' + clientId+"/close",
+      payload: clientId,
+      qos: 0,
+      retain: false
+    },
+  }
 
+  const mqttClient = mqtt.connect(host, options)
 
+  mqttClient.on('error', (err) => {
+    console.log('Connection error: ', err)
+    mqttClient.end()
+  })
 
-  function wantConnect(id) {
-    alert('你点击了 ' + id); // 弹出提示框提示点击的内容
-    sourceId = id
-    client.publish(topic_pub_want_connect_request_pre + sourceId, clientId, { qos: 2, retain: false }, function (error) {
+  mqttClient.on('reconnect', () => {
+    console.log('Reconnecting...')
+  })
+
+  mqttClient.on('message', async (topic, message, packet) => {
+    console.log('Received Message: ' + message.toString() + '\nOn topic: ' + topic)
+    const TOPIC_CLIENT_OFFER=topic_to_client_id+"/offer"
+    const TOPIC_CLIENT_CANDIDATE=topic_to_client_id+"/candidate"
+    switch (topic) {
+     
+      case topic_sub_source_query:
+        //listSources(message);
+        break;
+      case TOPIC_CLIENT_CANDIDATE:
+      case topic_sub_candidate:
+        // dealClientIdTopicMessage(message);
+        let candidata = JSON.parse(message)
+        if (candidata) {
+          this.peerConnect.addIceCandidate(candidata);
+        }
+        console.log("TOPIC_CLIENT_CANDIDATE," + candidata)
+        break;
+      case TOPIC_CLIENT_OFFER:
+      case topic_sub_offer:
+        let offer = JSON.parse(message)
+        console.log("topic_sub_offer," + offer)
+        if (offer) {
+          try {
+            await this.peerConnect.setRemoteDescription(offer);
+          } catch (e) {
+            console.log('Offer-setRemoteDescription: ', e);
+          }
+          try {
+            let answer = await this.peerConnect.createAnswer(); // 接收端创建 answer
+            await this.peerConnect.setLocalDescription(answer);
+            mqttClient.publish(topic_from_client_id+"/answer", JSON.stringify(answer))
+          } catch (e) {
+            console.log('createAnswer: ', e);
+          }
+        }
+        //dealClientIdTopicMessage(message);
+        break;
+      default:
+        break;
+    }
+  })
+
+  peerConnect.onicecandidate = (event) => {
+    //连接状态
+    // 监听 B 的ICE候选信息 如果收集到，就添加给 A
+    if (event.candidate) {
+      // this.peerA.addIceCandidate(event.candidate);
+      // console.log("line 125,get event.candidate:")
+      console.log(event.candidate)
+      // let candidata = {
+      //   cmd: "cand",
+      //   data: event.candidate
+      // }
+      mqttClient.publish(topic_from_client_id+"/candidate", JSON.stringify(event.candidate), { qos: 2, retain: false }, function (error) {
+        if (error) {
+          console.log(error)
+        } else {
+          console.log('event.candidate Published')
+        }
+      })
+    }
+  };
+
+  mqttClient.on('connect', () => {
+    console.log('Client connected:' + clientId)
+    // Subscribe
+    // mqttClient.subscribe(topic_sub_source_query, { qos: 2 })
+    mqttClient.subscribe(topic_sub_candidate, { qos: 2 })
+    // mqttClient.subscribe(topic_sub_offer, { qos: 2 })
+    mqttClient.subscribe(topic_to_client_id+"/#", { qos: 2 })
+
+    //  mqttClient.publish(topic_pub_source_query, JSON.stringify(queryData))
+  })
+
+  function newMqttClient(sourceID) {
+
+    mqttClient.publish(topic_pub_want_connect_request_pre + sourceId, clientId, { qos: 2, retain: false }, function (error) {
       if (error) {
         console.log(error)
       } else {
         console.log('wantConnect Published')
       }
     })
+    //mqttClient.subscribe(topic_source_pre + sourceID, { qos: 2 })
   }
 
-  
+  function wantConnect(id) {
+    //alert('你点击了 ' + id); // 弹出提示框提示点击的内容
+    remoteVideo.style.display = 'block';
+    //remoteVideo.style.transform = "rotate(90deg)";
+    sourceId = id
+    //为了能发送遗言 close/sourceId，只能先连接一次服务器，得到source列表。等点击选中的source之后得到sourceId，再更改遗言重新建立mqtt连接
+    newMqttClient(sourceId)
+  }
+
   //开启音视频源
   async function streamStart() {
     console.log('Requesting local stream');
     try {
       //捕获摄像头和麦克风的流，放到localVideo中
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video:false });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: false });
       console.log('Received local stream');
       localVideo.srcObject = stream;
       localStream = stream;

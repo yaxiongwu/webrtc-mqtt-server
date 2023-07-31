@@ -26,6 +26,7 @@ const broker = "www.bxzryd.cn"
 const port = 8883
 const topic_connected = "$SYS/brokers/emqx@127.0.0.1/clients/+/connected"
 const topic_disconnected = "$SYS/brokers/emqx@127.0.0.1/clients/+/disconnected"
+const topic_sub_close_source = "close/source"
 const topic_source_reg = "server/reg"
 const topic_source_query = "server/query"
 const topic_sys = "$SYS/brokers/#"
@@ -166,6 +167,19 @@ func (m *MqttClient) Subscribe() {
 	})
 	m.client.Subscribe(topic_disconnected, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
 		//fmt.Printf("Received `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
+		m.OnSubscribeDisconnected(msg.Payload())
+	})
+	m.client.Subscribe(topic_sub_close_source, byte(qos), func(client mqtt.Client, msg mqtt.Message) {
+		fmt.Printf("Received `%s` from `%s` topic\n", msg.Payload(), msg.Topic())
+		fmt.Printf("before,list: %v\n", m.SourceList.SList)
+		sourceId := msg.Payload()
+		for index, value := range m.SourceList.SList {
+			if value.Id == string(sourceId) {
+				//m.SourceList.SList[index]=nil
+				m.SourceList.SList = append(m.SourceList.SList[:index], m.SourceList.SList[index+1:]...)
+			}
+		}
+		fmt.Printf("after,list: %v\n", m.SourceList.SList)
 		m.OnSubscribeDisconnected(msg.Payload())
 	})
 	m.client.Subscribe(topic_source_reg, byte(qos), func(client mqtt.Client, msg mqtt.Message) {

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"github.com/unrolled/secure"
+	"github.com/yaxiongwu/webrtc-mqtt-server/pkg/clients"
 	mqtt "github.com/yaxiongwu/webrtc-mqtt-server/pkg/mqtt_client"
 )
 
@@ -85,15 +86,25 @@ func loadConfig() bool {
 	return true
 }
 
+func getSourceList() []clients.Source {
+	var sourceList []clients.Source
+	for _, value := range mqttClient.SourceList.SList {
+		sourceList = append(sourceList, value)
+		logger.Printf("source:", "source client info ", value)
+	}
+	return sourceList
+}
+
 func ginRun() {
 	r := gin.Default()
 
 	r.GET("/sourcesList", func(c *gin.Context) {
 		logger.Printf("c.Query(sourceType),%v ", c.Query("sourceType"))
-		//list, _ := json.Marshal(getSourceList(s, rtc.SourceType(rtc.SourceType_value[c.Query("sourceType")])))
+		//list, _ := json.Marshal(getSourceList(c.Query("sourceType")))
+		list, _ := json.Marshal(getSourceList())
 		c.JSON(200, gin.H{
-			//"list": string(list), //[]byte会自动转换成base64传输
-			"message": "pong",
+			"list": string(list), //[]byte会自动转换成base64传输
+			//"message": "pong",
 		})
 	})
 
